@@ -9,16 +9,18 @@ const URL2 = process.env.URL2 || "mongodb+srv://ce21btech11031:NyUkB72MBZHozIrc@
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // Setup storage engine for multer
 const multer = require('multer');
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Ensure the folder exists and has write permissions
+        // Correct path to 'uploads' folder inside 'public'
+        const uploadPath = path.join(__dirname, '../public/uploads');
+        cb(null, uploadPath); // Ensure this directory exists
     },
     filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
+        cb(null, Date.now() + path.extname(file.originalname)); // Unique filename with timestamp
     },
 });
 const upload = multer({ storage: storage });
@@ -39,7 +41,8 @@ app.post('/kaizendetail', upload.single('image'), async (req, res) => {
             ...req.body,
             username: req.body.username,
             createdAt: new Date(),
-            image: req.file ? req.file.path : ''
+            image: req.file ? `/uploads/${req.file.filename}` : '',
+
         };
 
         const newKaizen = await Kaizenmodel.create(newKaizenData);
@@ -57,6 +60,7 @@ app.post('/kaizendetail', upload.single('image'), async (req, res) => {
         });
     }
 });
+
 
 // Get all Kaizen entries
 app.get('/kaizenfilled', async (req, res) => {
@@ -207,4 +211,4 @@ app.get('/kaizenfilled/:id', async (req, res) => {
 
 // Start server
 
-app.listen(PORT1,() => console.log(`Server is running on PORT ${PORT1}`));
+app.listen(PORT1, () => console.log(`Server is running on PORT ${PORT1}`));
