@@ -1,0 +1,16 @@
+{
+    "version": 2,
+    "builds": [ 
+      {
+        "src": "api/kaizenserver.js",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "/api/kaizenserver.js"
+      }
+    ]
+  }
+  
