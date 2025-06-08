@@ -6,24 +6,29 @@ const path = require('path');
 const PORT1 = process.env.PORT1 || 3002;
 const URL2 = process.env.URL2 || "mongodb+srv://ce21btech11031:NyUkB72MBZHozIrc@cluster0.uw0xz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('./cloudinary');
+
+
+
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+// app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // Setup storage engine for multer
 const multer = require('multer');
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        // Correct path to 'uploads' folder inside 'public'
-        const uploadPath = path.join(__dirname, '../public/uploads');
-        cb(null, uploadPath); // Ensure this directory exists
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname)); // Unique filename with timestamp
+
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'kaizen_uploads',
+        allowed_formats: ['jpg', 'png', 'jpeg'],
     },
 });
-const upload = multer({ storage: storage });
+
+const upload = multer({ storage });
+
 
 
 // Connect to MongoDB
@@ -40,8 +45,9 @@ app.post('/kaizendetail', upload.single('image'), async (req, res) => {
         const newKaizenData = {
             ...req.body,
             username: req.body.username,
+            company: req.body.company,
             createdAt: new Date(),
-            image: req.file ? `/uploads/${req.file.filename}` : '',
+            image: req.file ? req.file.path : '',
 
         };
 
