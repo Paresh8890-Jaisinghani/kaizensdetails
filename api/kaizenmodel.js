@@ -12,6 +12,7 @@ const kaizenSchema = new mongoose.Schema({
     image: { type: String }, // original image
     updatedImage: { type: String }, // new image after implementation
     username: String,
+    company : String,
     status: String,
     annualSavings: String,
     benefits: { type: [String], default: [] }, // Changed from String to Array of Strings
