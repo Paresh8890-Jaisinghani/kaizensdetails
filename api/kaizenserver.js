@@ -199,6 +199,40 @@ app.put('/kaizenfilled/impact/:id', async (req, res) => {
 });
 
 
+app.put('/kaizenfilled/benefitscore/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { benefitscore } = req.body;
+
+        if (!benefitscore) {
+            return res.status(400).json({ message: "benefitscore field is required" });
+        }
+
+        const updatedKaizen = await Kaizenmodel.findByIdAndUpdate(
+            id,
+            { benefitscore },
+            { new: true }
+        );
+
+        if (!updatedKaizen) {
+            return res.status(404).json({ message: "Kaizen not found" });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "benefitscore updated successfully",
+            data: updatedKaizen,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Error updating benefitscore",
+            error: error.message,
+        });
+    }
+});
+
+
 
 
 // Get a single Kaizen entry

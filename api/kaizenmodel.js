@@ -17,6 +17,7 @@ const kaizenSchema = new mongoose.Schema({
     annualSavings: String,
     benefits: { type: [String], default: [] }, // Changed from String to Array of Strings
     impact: String,
+    benefitscore : String,
     implementationCost: String,
     implementedAction: String,
     teamMembers: String,
