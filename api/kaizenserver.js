@@ -3,22 +3,19 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const Kaizenmodel = require('./kaizenmodel.js');
 const path = require('path');
+const NodeCache = require('node-cache'); // Added node-cache
+const PORT1 = process.env.PORT1 || 3002;
+const URL2 = process.env.URL2 || "mongodb+srv://ce21btech11031:NyUkB72MBZHozIrc@cluster0.uw0xz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('./cloudinary');
-const multer = require('multer');
-const NodeCache = require('node-cache');
-
-const PORT1 = process.env.PORT1 || 3002;
-const URL2 = process.env.URL2;
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Setup cache (no expiry – we will manually manage updates)
-const kaizenCache = new NodeCache({ stdTTL: 0, checkperiod: 0 });
+const multer = require('multer');
 
-// Multer storage for cloudinary
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
@@ -26,37 +23,37 @@ const storage = new CloudinaryStorage({
         allowed_formats: ['jpg', 'png', 'jpeg'],
     },
 });
+
 const upload = multer({ storage });
 
-// Connect DB
+// Initialize cache
+const kaizenCache = new NodeCache({ stdTTL: 0, checkperiod: 0 });
+
+// Connect to MongoDB
 mongoose.connect(URL2, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
 })
     .then(() => console.log("Connected to MongoDB"))
-    .catch(err => console.log("Error while connecting:", err.message));
+    .catch(err => console.log("Error while connecting to database:", err.message));
 
-
-// ------------------ ROUTES ------------------ //
-
-// Add new Kaizen (POST)
+// POST: Add a new Kaizen detail
 app.post('/kaizendetail', upload.single('image'), async (req, res) => {
     try {
         const newKaizenData = {
             ...req.body,
+            username: req.body.username,
+            company: req.body.company,
             createdAt: new Date(),
             image: req.file ? req.file.path : '',
         };
 
         const newKaizen = await Kaizenmodel.create(newKaizenData);
 
-        // Save in cache
-        kaizenCache.set(newKaizen._id.toString(), newKaizen.toObject());
-        // Also update "all" cache if it exists
-        let allKaizens = kaizenCache.get("all");
-        if (allKaizens) {
-            allKaizens.push(newKaizen.toObject());
-            kaizenCache.set("all", allKaizens);
+        // Update cache if it exists
+        const cachedKaizens = kaizenCache.get("allKaizens");
+        if (cachedKaizens) {
+            kaizenCache.set("allKaizens", [...cachedKaizens, newKaizen]);
         }
 
         res.status(201).json({
@@ -65,78 +62,123 @@ app.post('/kaizendetail', upload.single('image'), async (req, res) => {
             data: newKaizen,
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Failed to add Kaizen detail", error: error.message });
+        res.status(500).json({
+            success: false,
+            message: "Failed to add Kaizen detail",
+            error: error.message,
+        });
     }
 });
 
-
-// Get all Kaizen entries (GET)
+// GET: All Kaizen entries
 app.get('/kaizenfilled', async (req, res) => {
     try {
-        let kaizens = kaizenCache.get("all");
-
+        let kaizens = kaizenCache.get("allKaizens");
         if (!kaizens) {
-            kaizens = await Kaizenmodel.find().lean();
-            kaizenCache.set("all", kaizens);
+            kaizens = await Kaizenmodel.find();
+            kaizenCache.set("allKaizens", kaizens);
         }
-
         res.json({ success: true, data: kaizens });
     } catch (err) {
         res.status(500).json({ success: false, message: "Failed to fetch Kaizen entries", error: err.message });
     }
 });
 
-
-// Get single Kaizen (GET by ID)
-app.get('/kaizenfilled/:id', async (req, res) => {
+// PUT: Update status of a Kaizen entry
+app.put('/kaizenfilled/status/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const { status } = req.body;
 
-        let kaizen = kaizenCache.get(id);
-
-        if (!kaizen) {
-            kaizen = await Kaizenmodel.findById(id).lean();
-            if (!kaizen) {
-                return res.status(404).json({ message: 'Kaizen not found' });
-            }
-            kaizenCache.set(id, kaizen);
+        if (!status) {
+            return res.status(400).json({ message: "Status is required" });
         }
 
-        res.status(200).json({ data: kaizen });
+        const updatedKaizen = await Kaizenmodel.findByIdAndUpdate(
+            id,
+            { status },
+            { new: true }
+        );
+
+        if (!updatedKaizen) {
+            return res.status(404).json({ message: "Kaizen not found" });
+        }
+
+        // Update cache if it exists
+        const cachedKaizens = kaizenCache.get("allKaizens");
+        if (cachedKaizens) {
+            const index = cachedKaizens.findIndex(k => k._id.toString() === id);
+            if (index !== -1) {
+                cachedKaizens[index] = updatedKaizen;
+                kaizenCache.set("allKaizens", cachedKaizens);
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Status updated successfully",
+            data: updatedKaizen,
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Server error', error });
+        res.status(500).json({
+            success: false,
+            message: "Error updating status",
+            error: error.message,
+        });
     }
 });
 
-
-// Update Kaizen (PUT by ID)
+// PUT: Update Kaizen details (original logic intact)
 app.put('/kaizenfilled/:id', upload.single('updatedImage'), async (req, res) => {
     try {
         const { id } = req.params;
-        const updateData = { ...req.body };
+        const {
+            teamMembers,
+            implementationCost,
+            annualSavings,
+            implementedAction,
+            impact,
+            benefits,
+            status,
+            other,
+        } = req.body;
+
+        const updateData = {
+            teamMembers,
+            implementationCost,
+            annualSavings,
+            implementedAction,
+            impact,
+            benefits,
+            status
+        };
+
+        if (status === "Implemented") {
+            updateData.updatedAt = new Date();
+        }
+
+        if (benefits === 'other') {
+            updateData.other = other;
+        }
 
         if (req.file) {
             updateData.updatedImage = req.file.path;
         }
 
-        if (updateData.status === "Implemented") {
-            updateData.updatedAt = new Date();
-        }
-
-        const updatedKaizen = await Kaizenmodel.findByIdAndUpdate(id, updateData, { new: true }).lean();
+        const updatedKaizen = await Kaizenmodel.findByIdAndUpdate(id, updateData, { new: true });
 
         if (!updatedKaizen) {
             return res.status(404).send({ error: 'Kaizen not found.' });
         }
 
-        // Update in cache
-        kaizenCache.set(id, updatedKaizen);
-
-        // Also update in "all" cache if exists
-        let allKaizens = kaizenCache.get("all");
-        if (allKaizens) {
-            allKaizens = allKaizens.map(k => k._id.toString() === id ? updatedKaizen : k);
-            kaizenCache.set("all", allKaizens);
+        // Update cache if it exists
+        const cachedKaizens = kaizenCache.get("allKaizens");
+        if (cachedKaizens) {
+            const index = cachedKaizens.findIndex(k => k._id.toString() === id);
+            if (index !== -1) {
+                cachedKaizens[index] = updatedKaizen;
+                kaizenCache.set("allKaizens", cachedKaizens);
+            }
         }
 
         res.status(200).send(updatedKaizen);
@@ -146,34 +188,84 @@ app.put('/kaizenfilled/:id', upload.single('updatedImage'), async (req, res) => 
     }
 });
 
-
-// Example for updating only status
-app.put('/kaizenfilled/status/:id', async (req, res) => {
+// Other PUT routes remain unchanged, just add cache update logic similar to above
+app.put('/kaizenfilled/impact/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { status } = req.body;
+        const { impact } = req.body;
 
-        const updatedKaizen = await Kaizenmodel.findByIdAndUpdate(id, { status }, { new: true }).lean();
-
-        if (!updatedKaizen) {
-            return res.status(404).json({ message: "Kaizen not found" });
+        if (!impact) {
+            return res.status(400).json({ message: "Impact field is required" });
         }
+
+        const updatedKaizen = await Kaizenmodel.findByIdAndUpdate(
+            id,
+            { impact },
+            { new: true }
+        );
+
+        if (!updatedKaizen) return res.status(404).json({ message: "Kaizen not found" });
 
         // Update cache
-        kaizenCache.set(id, updatedKaizen);
-
-        let allKaizens = kaizenCache.get("all");
-        if (allKaizens) {
-            allKaizens = allKaizens.map(k => k._id.toString() === id ? updatedKaizen : k);
-            kaizenCache.set("all", allKaizens);
+        const cachedKaizens = kaizenCache.get("allKaizens");
+        if (cachedKaizens) {
+            const index = cachedKaizens.findIndex(k => k._id.toString() === id);
+            if (index !== -1) {
+                cachedKaizens[index] = updatedKaizen;
+                kaizenCache.set("allKaizens", cachedKaizens);
+            }
         }
 
-        res.status(200).json({ success: true, data: updatedKaizen });
+        res.status(200).json({ success: true, message: "Impact updated successfully", data: updatedKaizen });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Error updating status", error: error.message });
+        res.status(500).json({ success: false, message: "Error updating impact", error: error.message });
     }
 });
 
+app.put('/kaizenfilled/benefitscore/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { benefitscore } = req.body;
 
-// ------------------ START ------------------ //
-app.listen(PORT1, () => console.log(`🚀 Server running on PORT ${PORT1}`));
+        if (!benefitscore) {
+            return res.status(400).json({ message: "benefitscore field is required" });
+        }
+
+        const updatedKaizen = await Kaizenmodel.findByIdAndUpdate(
+            id,
+            { benefitscore },
+            { new: true }
+        );
+
+        if (!updatedKaizen) return res.status(404).json({ message: "Kaizen not found" });
+
+        // Update cache
+        const cachedKaizens = kaizenCache.get("allKaizens");
+        if (cachedKaizens) {
+            const index = cachedKaizens.findIndex(k => k._id.toString() === id);
+            if (index !== -1) {
+                cachedKaizens[index] = updatedKaizen;
+                kaizenCache.set("allKaizens", cachedKaizens);
+            }
+        }
+
+        res.status(200).json({ success: true, message: "benefitscore updated successfully", data: updatedKaizen });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Error updating benefitscore", error: error.message });
+    }
+});
+
+// GET single Kaizen remains unchanged
+app.get('/kaizenfilled/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const suggestion = await Kaizenmodel.findById(id);
+        if (!suggestion) return res.status(404).json({ message: 'Kaizen not found' });
+        res.status(200).json({ data: suggestion });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error });
+    }
+});
+
+// Start server
+app.listen(PORT1, () => console.log(`Server is running on PORT ${PORT1}`));
