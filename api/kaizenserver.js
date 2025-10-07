@@ -1,3 +1,5 @@
+require('dotenv').config({ path: '../.env' });
+
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -5,7 +7,7 @@ const Kaizenmodel = require('./kaizenmodel.js');
 const path = require('path');
 const NodeCache = require('node-cache'); // Added node-cache
 const PORT1 = process.env.PORT1 || 3002;
-const URL2 = process.env.URL2 || "mongodb+srv://ce21btech11031:NyUkB72MBZHozIrc@cluster0.uw0xz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const URL2 = process.env.URL2
 
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('./cloudinary');
